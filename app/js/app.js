@@ -7,7 +7,9 @@ import {
   TYPE_INTENSITY, computeAdaptation, findConflicts, generatePlan, newId, planWeeks, sessionStreak, suggestMakeup, weekSummary,
 } from './engine.js';
 import { LANGS, dayName, detectLang, fmtDate, fmtLong, fmtShort, getLang, setLang, t } from './i18n.js';
-import { clearState, emptyState, flush, loadState, normalise, saveState } from './store.js';
+import { clearState, emptyState, flush, isRelayUrl, loadState, normalise, saveState } from './store.js';
+import { applyActivities, fetchGarminActivities, readActivityFile } from './devices.js';
+import { buildIcs, encodeWorkout, slug, zipStore } from './exporters.js';
 import { art, face, icon } from './art.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -511,7 +513,19 @@ function sheetSession(id) {
     </div>
     <p>${t(`typeDesc.${TYPE_INTENSITY[s.type] ? s.type : 'free'}`)}</p>
     ${s.note ? `<p class="card flat">${esc(s.note)}</p>` : ''}
+    ${s.actual ? `<p class="card flat"><b>${t('devices.recorded')}, ${esc(s.actual.source)}:</b> ${esc(actualLine(s.actual))}</p>` : ''}
     <div class="actions-col">${actions}</div>`);
+}
+
+const km = (m) => new Intl.NumberFormat(getLang() === 'de' ? 'de-AT' : 'en-GB', { maximumFractionDigits: 1 }).format(m / 1000);
+function actualLine(a) {
+  return [
+    a.distance ? `${km(a.distance)} km` : '',
+    a.avgHr ? `${t('devices.avgHr')} ${a.avgHr}` : '',
+    a.maxHr ? `${t('devices.maxHr')} ${a.maxHr}` : '',
+    a.ascent ? `${a.ascent} m ${t('devices.ascent')}` : '',
+    a.calories ? `${a.calories} kcal` : '',
+  ].filter(Boolean).join(', ') || '–';
 }
 
 function sheetFeedback(id) {
@@ -620,6 +634,7 @@ function sheetSettings() {
       <p class="error" role="alert" data-error></p>
       <button class="btn primary big block">${t('common.save')}</button>
     </form>
+    <button type="button" class="btn primary block" data-action="devices">${t('devices.open')}</button>
     <section class="stack">
       <h2>${t('settings.data')}</h2>
       <p class="small muted">${t('settings.exportHint')} ${t('settings.offline')}</p>
@@ -630,6 +645,84 @@ function sheetSettings() {
       <button type="button" class="btn block" data-action="install" ${canInstall ? '' : 'hidden'}>${t('settings.install')}</button>
       <button type="button" class="btn danger block" data-action="reset">${t('settings.reset')}</button>
     </section>`);
+}
+
+function sheetDevices(message = '') {
+  const g = state.garmin;
+  const connected = Boolean(g.key && g.relay);
+  const picks = selectedSports();
+  const how = (title, text) => `<details class="how"><summary>${t(title)}</summary><p class="small">${t(text)}</p></details>`;
+  openSheet(t('devices.title'), `
+    <p class="notice" role="status" data-device-status>${esc(message)}</p>
+    <section class="card stack">
+      <h3>${t('devices.garminTitle')}</h3>
+      <p class="small">${t('devices.garminText')}
+        <a href="https://github.com/jessehaemmerle/trainingsplaner#garmin-synchronisierung" target="_blank" rel="noopener">${t('devices.garminGuide')}</a></p>
+      <form class="stack" data-form="garmin" novalidate>
+        <div class="field"><label for="g-key">${t('devices.garminKey')}</label>
+          <input class="input" id="g-key" name="key" type="password" autocomplete="off" spellcheck="false" maxlength="300" value="${esc(g.key)}">
+          <p class="hint">${t('devices.garminKeyHint')}
+            <a href="https://connect.garmin.com/app/settings/personalApiToken" target="_blank" rel="noopener">${t('devices.garminKeyLink')}</a></p></div>
+        <div class="field"><label for="g-relay">${t('devices.garminRelay')}</label>
+          <input class="input" id="g-relay" name="relay" type="url" inputmode="url" autocomplete="off" spellcheck="false" maxlength="200" value="${esc(g.relay)}" placeholder="${t('devices.garminRelayPh')}"></div>
+        <p class="error" role="alert" data-error></p>
+        <button class="btn primary block">${t(connected ? 'devices.garminSync' : 'devices.garminSave')}</button>
+        <p class="small muted">${g.last ? esc(t('devices.garminLast', fmtLong(g.last))) : t('devices.garminNever')}</p>
+        ${g.key || g.relay ? `<button type="button" class="btn quiet block" data-action="garmin-disconnect">${t('devices.garminDisconnect')}</button>` : ''}
+      </form>
+    </section>
+    <section class="card stack">
+      <h3>${t('devices.filesTitle')}</h3>
+      <p class="small">${t('devices.filesText')}</p>
+      <div class="field"><label for="d-fallback">${t('devices.fallback')}</label>
+        <select class="input" id="d-fallback"><option value="">–</option>${picks.map((id) => `<option value="${esc(id)}">${esc(sportName(id))}</option>`).join('')}</select></div>
+      <label class="btn primary block">${t('devices.pick')}<input type="file" multiple accept=".fit,.tcx,.gpx,.zip,.xml" class="sr" data-change="activity-files"></label>
+      ${how('devices.howGarmin', 'devices.howGarminText')}${how('devices.howApple', 'devices.howAppleText')}${how('devices.howOther', 'devices.howOtherText')}
+    </section>
+    <section class="card stack">
+      <h3>${t('devices.exportTitle')}</h3>
+      <div class="stack"><button type="button" class="btn block" data-action="export-ics">${t('devices.calendar')}</button><p class="small">${t('devices.calendarText')}</p></div>
+      <div class="stack"><button type="button" class="btn block" data-action="export-workouts">${t('devices.workouts')}</button><p class="small">${t('devices.workoutsText')}</p></div>
+    </section>`);
+}
+
+const deviceStatus = (msg) => { const el = $('[data-device-status]'); if (el) el.textContent = msg; };
+
+function download(name, data, type) {
+  const blob = new Blob([data], { type });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/** Applies activities from a watch and lets the plan react to them. */
+function importActivities(list, fallbackSport) {
+  const result = applyActivities(state.sessions, list, { fallbackSport: sports.has(fallbackSport) ? fallbackSport : null, makeId: () => newId() });
+  if (result.matched + result.created) replan(nextMonday());
+  return result;
+}
+
+let syncing = false;
+async function syncGarmin({ quiet = false } = {}) {
+  const g = state.garmin;
+  if (syncing || !g.key || !g.relay) return;
+  syncing = true;
+  if (!quiet) deviceStatus(t('devices.syncing'));
+  try {
+    const from = g.last && g.last > addDays(today, -27) ? addDays(g.last, -3) : addDays(today, -30);
+    const list = await fetchGarminActivities({ key: g.key, base: g.relay, startDate: from, endDate: today });
+    const result = importActivities(list);
+    g.last = today;
+    saveState(state);
+    render();
+    if (!quiet) sheetDevices(t('devices.result', result));
+    else if (result.matched + result.created) toast(`Garmin: ${t('devices.result', result)}`);
+  } catch (error) {
+    const key = { 'garmin-network': 'errNetwork', 'garmin-auth': 'errAuth' }[error.message] || 'errHttp';
+    if (!quiet) deviceStatus(t(`devices.${key}`));
+  } finally {
+    syncing = false;
+  }
 }
 
 function sheetReset() {
@@ -755,6 +848,32 @@ const actions = {
   },
 
   settings: () => sheetSettings(),
+  devices: () => sheetDevices(),
+  'garmin-disconnect'() {
+    state.garmin = { key: '', relay: '', last: null };
+    saveState(state);
+    sheetDevices(t('devices.garminDisconnected'));
+  },
+  'export-ics'() {
+    const open = state.sessions.filter((s) => s.status === 'planned' && s.date >= today);
+    if (!open.length) { deviceStatus(t('devices.noOpen')); return; }
+    const events = open.map((s) => ({
+      id: s.id, date: s.date,
+      title: `${sportName(s.sportId)}: ${sessionTitle(s)}, ${s.duration} ${t('common.min')}`,
+      description: `${t(`typeDesc.${TYPE_INTENSITY[s.type] ? s.type : 'free'}`)}${s.note ? `\n${s.note}` : ''}`,
+    }));
+    download('trainingsplaner.ics', buildIcs(events, t('appName')), 'text/calendar');
+  },
+  'export-workouts'() {
+    const until = addDays(today, 13);
+    const open = state.sessions.filter((s) => s.status === 'planned' && s.date >= today && s.date <= until && s.type !== 'race');
+    if (!open.length) { deviceStatus(t('devices.noOpen')); return; }
+    const files = open.map((s) => {
+      const name = `${s.date.slice(8)}.${s.date.slice(5, 7)}. ${sessionTitle(s)}`;
+      return { name: `${s.date}-${slug(`${sportName(s.sportId)} ${sessionTitle(s)}`)}.fit`, data: encodeWorkout(s, name, t('devices.steps')) };
+    });
+    download(`garmin-workouts-${today}.zip`, zipStore(files), 'application/zip');
+  },
   'add-sport'() {
     const form = $('#ob-form') || $('[data-form=settings]');
     if (form) readProfile(form);
@@ -773,10 +892,9 @@ const actions = {
     saveState(state); render(); sheetSettings();
   },
   export() {
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: `trainingsplaner-backup-${today}.json` });
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    // The Garmin key is a credential and stays out of the backup file.
+    const copy = { ...state, garmin: { ...state.garmin, key: '' } };
+    download(`trainingsplaner-backup-${today}.json`, JSON.stringify(copy, null, 2), 'application/json');
   },
   reset: () => sheetReset(),
   async 'confirm-reset'() {
@@ -877,6 +995,17 @@ const forms = {
     saveState(state);
     if (state.onboarded) { render(); sheetSettings(); } else { closeSheet(); render(); }
   },
+  garmin(form) {
+    const fd = new FormData(form);
+    const key = String(fd.get('key') || '').trim();
+    const relay = String(fd.get('relay') || '').trim().replace(/\/+$/, '');
+    const err = !key || !relay ? 'devices.garminNeed' : !isRelayUrl(relay) ? 'devices.relayInvalid' : null;
+    if (err) { form.querySelector('[data-error]').textContent = t(err); return; }
+    form.querySelector('[data-error]').textContent = '';
+    Object.assign(state.garmin, { key, relay });
+    saveState(state);
+    syncGarmin();
+  },
   settings(form) {
     readProfile(form);
     const err = !state.profile.sports.length ? 'profile.needSport' : !state.profile.days.length ? 'profile.needDay' : null;
@@ -904,13 +1033,36 @@ const changes = {
     const radio = el.form.querySelector(`[name=intensity][value="${n}"]`);
     if (radio) radio.checked = true;
   },
+  async 'activity-files'(el) {
+    const files = [...(el.files || [])];
+    if (!files.length) return;
+    const fallback = $('#d-fallback')?.value || '';
+    deviceStatus(t('devices.reading'));
+    const list = [];
+    const problems = [];
+    for (const file of files) {
+      try {
+        list.push(...await readActivityFile(file, { since: addDays(today, -60) }));
+      } catch (error) {
+        problems.push(error.message === 'zip-too-large' ? t('devices.zipTooLarge') : t('devices.fileError', file.name));
+      }
+    }
+    const result = importActivities(list, fallback);
+    saveState(state);
+    render();
+    sheetDevices([list.length || !problems.length ? t('devices.result', result) : '', ...problems].filter(Boolean).join(' '));
+    const select = $('#d-fallback');
+    if (select) select.value = fallback;
+  },
   async import(el) {
     const file = el.files?.[0];
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
       if (!data || typeof data !== 'object' || !data.profile || !Array.isArray(data.sessions)) throw new Error('shape');
+      const garminKey = state.garmin.key;
       state = normalise(data);
+      if (!state.garmin.key) state.garmin.key = garminKey;
       ui.week = weekStart(today);
       closeSheet(); commit(); toast(t('settings.imported'));
     } catch {
@@ -987,6 +1139,7 @@ document.addEventListener('visibilitychange', () => {
     ui.week = weekStart(today);
     extendPlan();
     render();
+    syncGarmin({ quiet: true });
   }
 });
 window.addEventListener('pagehide', () => flush());
@@ -1007,6 +1160,7 @@ async function boot() {
   setLang(state.lang || detectLang());
   extendPlan();
   render();
+  if (state.onboarded) syncGarmin({ quiet: true });
   navigator.storage?.persist?.().catch(() => {});
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});

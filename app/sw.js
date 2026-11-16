@@ -1,7 +1,7 @@
 // Offline support: the app shell is precached on install, then served
 // stale-while-revalidate so updates arrive on the next launch.
 
-const CACHE = 'trainingsplaner-v1';
+const CACHE = 'trainingsplaner-v2';
 const SHELL = [
   './',
   'index.html',
@@ -10,7 +10,9 @@ const SHELL = [
   'js/app.js',
   'js/art.js',
   'js/dates.js',
+  'js/devices.js',
   'js/engine.js',
+  'js/exporters.js',
   'js/i18n.js',
   'js/sports.js',
   'js/store.js',

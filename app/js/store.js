@@ -15,6 +15,7 @@ export const emptyState = () => ({
   goals: [],
   sessions: [],
   planStart: null,
+  garmin: { key: '', relay: '', last: null },
 });
 
 function open() {
@@ -75,6 +76,16 @@ export async function clearState() {
   try { localStorage.removeItem(DB); } catch { /* ignore */ }
 }
 
+/** A relay must be an https address (http only for local testing). */
+export function isRelayUrl(v) {
+  try {
+    const u = new URL(v);
+    return u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(u.hostname));
+  } catch {
+    return false;
+  }
+}
+
 /** Validates loaded or imported data and fills in anything missing. */
 export function normalise(data) {
   const base = emptyState();
@@ -84,6 +95,15 @@ export function normalise(data) {
   const str = (v, max = 80) => (typeof v === 'string' ? v.slice(0, max) : '');
   const num = (v, lo, hi, d) => (Number.isFinite(+v) ? Math.min(hi, Math.max(lo, Math.round(+v))) : d);
   const p = data.profile && typeof data.profile === 'object' ? data.profile : {};
+  // Recorded values from a watch: distance (m), heart rate, calories, ascent (m).
+  const actual = (v) => {
+    if (!v || typeof v !== 'object') return undefined;
+    const out = { source: str(v.source, 20) || 'Import' };
+    for (const [k, hi] of [['distance', 2000000], ['avgHr', 260], ['maxHr', 260], ['calories', 50000], ['ascent', 20000]]) {
+      if (Number.isFinite(+v[k]) && +v[k] > 0) out[k] = Math.min(hi, Math.round(+v[k]));
+    }
+    return out;
+  };
   return {
     schema: SCHEMA,
     lang: ['de', 'en'].includes(data.lang) ? data.lang : null,
@@ -117,7 +137,13 @@ export function normalise(data) {
         locked: Boolean(s.locked), phase: str(s.phase, 12) || undefined, goalId: str(s.goalId, 40) || undefined,
         note: str(s.note, 400) || undefined,
         rpe: s.rpe ? num(s.rpe, 1, 10, 5) : undefined, feeling: s.feeling ? num(s.feeling, 1, 5, 3) : undefined,
+        extId: str(s.extId, 60) || undefined, actual: actual(s.actual),
       })),
     planStart: isDate(data.planStart) ? data.planStart : null,
+    garmin: {
+      key: str(data.garmin?.key, 300),
+      relay: isRelayUrl(data.garmin?.relay) ? data.garmin.relay : '',
+      last: isDate(data.garmin?.last) ? data.garmin.last : null,
+    },
   };
 }

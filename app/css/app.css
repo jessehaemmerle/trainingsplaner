@@ -546,3 +546,13 @@ button.sport-tile { padding: 0; background: none; border: 0; text-align: start; 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---- Watches & devices ------------------------------------------------- */
+.notice { background: var(--sun); border: var(--line); border-radius: var(--r-md); padding: 0.7rem 0.9rem; font-weight: 700; }
+.notice:empty { display: none; }
+.sheet a { color: inherit; font-weight: 700; text-underline-offset: 0.2em; }
+.how { border-block-start: 2.5px dashed var(--ink-soft); padding-block-start: 0.5rem; }
+.how summary { font-weight: 700; cursor: pointer; min-block-size: 2.75rem; display: flex; align-items: center; gap: 0.5rem; list-style: none; }
+.how summary::-webkit-details-marker { display: none; }
+.how summary::before { content: '+'; font: 400 1.25rem/1 var(--display); inline-size: 1rem; text-align: center; }
+.how[open] summary::before { content: '–'; }
