@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Trainingsplaner</title>
+  <meta name="description" content="Ein Trainingsplan für alle deine Sportarten, abgestimmt auf deine Ziele und Wettkämpfe.">
+  <meta name="theme-color" content="#EEE8FF">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Trainingsplaner">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preload" href="fonts/bagel-fat-one.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/bricolage-grotesque.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="css/app.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div id="app" class="app">
+    <main id="view" tabindex="-1"></main>
+  </div>
+  <nav id="tabs" class="tabs" hidden></nav>
+  <dialog id="sheet" class="sheet" closedby="any" aria-labelledby="sheet-title"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript><p style="padding:2rem">Diese App braucht JavaScript. · This app needs JavaScript.</p></noscript>
+</body>
+</html>

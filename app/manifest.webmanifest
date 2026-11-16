@@ -1,0 +1,23 @@
+{
+  "id": "./",
+  "name": "Trainingsplaner",
+  "short_name": "Training",
+  "description": "Ein Trainingsplan für alle deine Sportarten, abgestimmt auf deine Ziele und Wettkämpfe.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEE8FF",
+  "theme_color": "#EEE8FF",
+  "categories": ["sports", "health", "fitness"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Heute", "url": "./#today" },
+    { "name": "Plan", "url": "./#plan" }
+  ]
+}
