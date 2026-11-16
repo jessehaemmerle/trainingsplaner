@@ -37,7 +37,7 @@ export function workoutSteps(session) {
     case 'sharpen':
       return framed(600, 4, 120, 180, 4);
     case 'fartlek': {
-      const reps = Math.min(8, Math.max(4, Math.floor((total - 900) / 180)));
+      const reps = Math.min(14, Math.max(4, Math.floor((total - 1200) / 180)));
       return framed(600, reps, 60, 120, 4);
     }
     case 'recovery':
